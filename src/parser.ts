@@ -29,80 +29,154 @@ type ParserFailResult<R extends string[] = string[]> = [null, R];
 
 /** Parser result helpers */
 
+/** ParserResult P1 -> ParserResult P2 -> `${P1}${P2}` || P1 || ParserFailResult */
 type FlatParserConcat<P1 extends ParserResult, P2 extends ParserResult> =
   P1 extends [string[], any]
   ? P2 extends [string[], any]
     ? ParserSuccessResult<[Concat<[...P1[0], ...P2[0]]>], P2[1]>
     : P1
-  : P2 extends [string[], any]
-    ? P2
-    : ParserFailResult<P1[1]>;
+  : ParserFailResult<P1[1]>;
 
+/** ParserResult P1 -> ParserResult P2 -> [...P1, ...P2] || P1 || ParserFailResult */
 type FlatParserJoin<P1 extends ParserResult, P2 extends ParserResult> =
   P1 extends [string[], any]
   ? P2 extends [string[], any]
     ? ParserSuccessResult<[...P1[0], ...P2[0]], P2[1]>
     : P1
-  : P2 extends [string[], any]
-    ? P2
-    : ParserFailResult<P1[1]>;
+  : ParserFailResult<P1[1]>;
 
-type FlatParserOneOf<P extends ParserResult[]> = P extends [
-  infer R extends ParserResult,
-  ...infer Rest extends ParserResult[]
-] ? R extends ParserSuccessResult<string[]>
-    ? R
-    : FlatParserOneOf<Rest>
-  : ParserFailResult;
+/** ParserResult P1 -> ParserResult P2 -> [...P1, ...P2] || ParserFailResult */
+type FlatParserSuccessJoin<P1 extends ParserResult, P2 extends ParserResult> =
+  P1 extends ParserSuccessResult<string[]>
+  ? P2 extends ParserSuccessResult<string[]>
+    ? ParserSuccessResult<[...P1[0], ...P2[0]], P2[1]>
+    : ParserFailResult<P1[1]>
+  : ParserFailResult<P1[1]>;
+
+/** Parser HKT */
+
+abstract class Parser {
+  input: unknown; // this unknown seems to be required, otherwise not-parsed rest will be string[] instead of proper tuple
+  abstract apply: (...x: any[]) => ParserResult;
+}
+
+/** Input -> Parser -> ParserResult */
+type ApplyParser<Input, P extends Parser> = ReturnType<
+  (P & {
+    input: Input;
+  })["apply"]
+>;
+
+/**
+ * All parsers need to success (due to FlatParserSucessJoin).
+ * If FlatParserJoin would be used instead, then parsing will stop on first fail, however what was parsed will be returned
+ */
+interface ChainParsers<P extends Parser[]> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  P extends [
+    infer P1 extends Parser,
+    ...infer Rest extends Parser[]
+  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<string[]>
+      ? FlatParserSuccessJoin<R, ApplyParser<R[1], ChainParsers<Rest>>>
+      : ParserFailResult<typeof input>
+    : ParserSuccessResult<[], typeof input>;
+}
+
+/**
+ * At least one of parsers needs to success. The first to succeed is chosen.
+ */
+interface OneOfParsers<P extends Parser[]> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  P extends [
+    infer P1 extends Parser,
+    ...infer Rest extends Parser[]
+  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<string[]>
+      ? R
+      : ApplyParser<typeof input, OneOfParsers<Rest>>
+    : ParserFailResult<typeof input>;
+} 
+
+/**
+ * Concatenates parser result
+ */
+interface MapConcatParser<P extends Parser> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+    ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+    ? ParserSuccessResult<[Concat<R[0]>], R[1]>
+    : ParserFailResult<typeof input>
+} 
+
+/**
+ * Applies parser over and over until fails, then returns joined result.
+ * It needs to succeed at least once
+ */
+interface ManyParser<P extends Parser> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+    ? FlatParserJoin<R, ApplyParser<R[1], ManyParser<P>>>
+    : ParserFailResult<typeof input>
+}
+
+/**
+ * Applies parser over and over until fails, then returns joined result.
+ * It needs to succeed at least once
+ */
+interface DropParser<P extends Parser> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+    ? ParserSuccessResult<[], R[1]>
+    : ParserFailResult<typeof input>
+}
+
+/** Helper to write proper parser definitions */
+type Assume<T, U> = T extends U ? T : U;
 
 /** Basic parsers */
 
-type CharParser<T extends string[], CharT extends string> = T extends [infer C extends CharT, ...infer Rest extends string[]]
-  ? ParserSuccessResult<[C], Rest>
-  : ParserFailResult<T>;
+/** CharT -> [CharT] | ParserFailResult */
+interface CharParser<CharT extends string> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  (typeof input) extends [infer C extends CharT, ...infer Rest extends string[]]
+    ? ParserSuccessResult<[C], Rest>
+    : ParserFailResult<typeof input>;
+}
 
-type StringParser<T extends string[], Str extends string> = T extends [...Split<Str>, ...infer Rest extends string[]]
-  ? ParserSuccessResult<[Str], Rest>
-  : ParserFailResult<T>;
+/** ...Str -> [Str] | ParserFailResult */
+interface StringParser<Str extends string> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  (typeof input) extends [...Split<Str>, ...infer Rest extends string[]]
+    ? ParserSuccessResult<[Str], Rest>
+    : ParserFailResult<typeof input>;
+}
 
-type WordParser<T extends string[]> = CharParser<T, Char> extends infer Result extends ParserSuccessResult<string[]>
-  ? FlatParserConcat<Result, WordParser<Result[1]>>
-  : ParserFailResult<T>;
+/** ([a-zA-Z]) -> ['$1'] | ParserFailResult */
+type WordParser = MapConcatParser<ManyParser<CharParser<Char>>>;
 
-type SpaceParser<T extends string[]> = CharParser<T, ' '> extends infer Result extends ParserSuccessResult<string[]>
-  ? ParserSuccessResult<[], Result[1]>
-  : ParserFailResult<T>;
+/** ' ' -> [] | ParserFailResult */
+type SpaceParser = DropParser<CharParser<' '>>
 
-type SymbolParser<T extends string[]> = CharParser<T, AnySymbol>;
+type SymbolParser = CharParser<AnySymbol>;
 
 /** Domain parsers */
 
-type NamedArrowParser<T extends string[]> =
-  StringParser<T, '--'> extends infer R1 extends ParserSuccessResult<string[]>
-    ? WordParser<R1[1]> extends infer R3 extends ParserSuccessResult<string[]>
-      ? StringParser<R3[1], '-->'> extends infer R4 extends ParserSuccessResult<string[]>
-        ? ParserSuccessResult<[`--${R3[0][0]}->`], R4[1]>
-      : ParserFailResult<T>
-    : ParserFailResult<T>
-  : ParserFailResult<T>;
-
-type NamelessArrowParser<T extends string[]> = StringParser<T, '-->'>;
+type NamedArrowParser = MapConcatParser<ChainParsers<[StringParser<'--'>, WordParser, StringParser<'-->'>]>>;
+type NamelessArrowParser = StringParser<'-->'>;
 
 /** Implementation */
 
-type AnyParser<T extends string[]> = FlatParserOneOf<[
-  NamedArrowParser<T>,
-  NamelessArrowParser<T>,
-  SymbolParser<T>,
-  SpaceParser<T>,
-  WordParser<T>
+type AnyParser = OneOfParsers<[
+  NamedArrowParser,
+  NamelessArrowParser,
+  SymbolParser,
+  SpaceParser,
+  WordParser
 ]>;
 
 type TokenParser<T extends string[]> = 
-  AnyParser<T> extends infer R extends ParserSuccessResult<string[]>
+  ApplyParser<T, AnyParser> extends infer R extends ParserSuccessResult<string[]>
   ? FlatParserJoin<R, TokenParser<R[1]>>
   : ParserFailResult<T>;
 
-type B = TokenParser<Split<'-->[qwe, qeq]--qweqeq-->'>>;
+type TestParsing = TokenParser<Split<'-->[qwe, qeq]--qweqeq-->'>>;
 
 export { };
