@@ -4,7 +4,7 @@ export type ParserFailResult<R extends string[] = string[]> = [null, R];
 
 export abstract class Parser {
   input: unknown; // this unknown seems to be required, otherwise not-parsed rest will be string[] instead of proper tuple
-  abstract apply: (...x: any[]) => ParserResult;
+  abstract apply: (...x: any[]) => ParserResult<any>;
 }
 
 /** Input -> Parser -> ParserResult */

@@ -11,8 +11,8 @@ export interface ChainParsers<P extends Parser[]> extends Parser {
   P extends [
     infer P1 extends Parser,
     ...infer Rest extends Parser[]
-  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<string[]>
-      ? FlatParserSuccessJoin<R, ApplyParser<R[1], ChainParsers<Rest>>>
+  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<unknown[]>
+      ? FlatParserSuccessJoin<R, ApplyParser<R[1], ChainParsers<Rest>>, typeof input>
       : ParserFailResult<typeof input>
     : ParserSuccessResult<[], typeof input>;
 }
@@ -25,7 +25,7 @@ export interface OneOfParsers<P extends Parser[]> extends Parser {
   P extends [
     infer P1 extends Parser,
     ...infer Rest extends Parser[]
-  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<string[]>
+  ] ? ApplyParser<typeof input, P1> extends infer R extends ParserSuccessResult<any[]>
       ? R
       : ApplyParser<typeof input, OneOfParsers<Rest>>
     : ParserFailResult<typeof input>;
@@ -47,9 +47,20 @@ export interface MapConcatParser<P extends Parser> extends Parser {
  */
 export interface ManyParser<P extends Parser> extends Parser {
   apply: (input: Assume<this['input'], string[]>) =>
-  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<unknown[]>
     ? FlatParserJoin<R, ApplyParser<R[1], ManyParser<P>>>
     : ParserFailResult<typeof input>
+}
+
+/**
+ * Applies parser over and over until fails, then returns joined result.
+ * It always succeeds, even for no single success
+ */
+export interface Many0Parser<P extends Parser> extends Parser {
+  apply: (input: Assume<this['input'], string[]>) =>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<unknown[]>
+    ? FlatParserJoin<R, ApplyParser<R[1], ManyParser<P>>>
+    : ParserSuccessResult<[], typeof input>
 }
 
 /**
@@ -58,7 +69,7 @@ export interface ManyParser<P extends Parser> extends Parser {
  */
 export interface DropParser<P extends Parser> extends Parser {
   apply: (input: Assume<this['input'], string[]>) =>
-  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<unknown[]>
     ? ParserSuccessResult<[], R[1]>
     : ParserFailResult<typeof input>
 }
@@ -68,7 +79,7 @@ export interface DropParser<P extends Parser> extends Parser {
  */
 export interface OptParser<P extends Parser> extends Parser {
   apply: (input: Assume<this['input'], string[]>) =>
-  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<string[]>
+  ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<unknown[]>
     ? R
     : ParserSuccessResult<[], typeof input>
 }
@@ -80,8 +91,26 @@ export interface OptParser<P extends Parser> extends Parser {
 export interface UntilParser<P extends Parser> extends Parser {
   apply: (input: Assume<this['input'], string[]>) =>
   typeof input extends [infer V extends string, ...infer Rest extends string[]]
-  ? ApplyParser<Rest, P> extends infer R extends ParserSuccessResult<string[]>
-    ? ParserSuccessResult<[V], Rest> // Swap Rest to R[1] to drop conditional parser
-    : FlatParserSuccessJoin<ParserSuccessResult<[V], Rest>, ApplyParser<Rest, UntilParser<P>>>
-  : ParserFailResult<typeof input>;
+    ? ApplyParser<Rest, P> extends ParserSuccessResult<unknown[]>
+      ? ParserSuccessResult<[V], Rest> // Swap Rest to R[1] (R is result of ApplyParser) to drop conditional parser
+      : FlatParserSuccessJoin<ParserSuccessResult<[V], Rest>, ApplyParser<Rest, UntilParser<P>>>
+    : ParserFailResult<typeof input>;
 }
+
+/**
+ * Creates parser for: <ValueP>[<SeparatorP><ValueP>]*
+ * At least one Value needs to be parsed, then Separator and Value at least 0 times
+ */
+export type SeparatedByParser<ValueP extends Parser, SeparatorP extends Parser> = ChainParsers<[
+  ValueP,
+  Many0Parser<ChainParsers<[DropParser<SeparatorP>, ValueP]>>
+]>;
+
+/**
+ * Creates parser for: <ValueP>[<SeparatorP><ValueP>]*
+ * Allows for no successful parsing as well
+ */
+export type SeparatedBy0Parser<ValueP extends Parser, SeparatorP extends Parser> = OptParser<ChainParsers<[
+  ValueP,
+  Many0Parser<ChainParsers<[DropParser<SeparatorP>, ValueP]>>
+]>>;
