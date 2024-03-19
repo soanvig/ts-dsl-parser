@@ -121,3 +121,8 @@ type ParsedJson3 = ApplyParser<Split<'{    "asd"   :  123, "qwe": [    1, 2]}'>,
 type ParsedJson4 = ApplyParser<Split<'[1, 2, true, null, { "key": "value" }, []]'>, JsonParser>;
 type Result = UnwrapJSON<ParsedJson4[0][0]>;
 const a: [1, 2, true, null, { key: "value" }, []] = {} as Result; // NO ERROR ON ASSIGMENT!
+
+type ParsedJson5 = ApplyParser<Split<'[{"qweasd":"a","wqqqqwef":"a"},{"qsb":"a","w":"a"}]'>, JsonParser>;
+type ParsedJson6 = ApplyParser<Split<'123123123123123111231231231231232131231231111111'>, JsonParser>;
+type Result5 = UnwrapJSON<ParsedJson5[0][0]>;
+type Splitted = Split<'[{"qweasd":"a","wqqqqwef":"a"},{"qsb":"a","w":"a"}]'>;
