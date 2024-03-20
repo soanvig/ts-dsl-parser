@@ -5,6 +5,7 @@ export type RightBrace = '}';
 export type Comma = ',';
 export type Quote = '"';
 export type NewLine = '\n';
+export type WhiteSpace = NewLine | ' ' | '  ' | '   ' | '    ' | '     ' | '      ' | '       ' | '        ';
 export type Colon = ':';
 export type Space = ' ';
 export type AnySymbol = LeftBracket | RightBracket | Comma | Quote;

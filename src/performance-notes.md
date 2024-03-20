@@ -1,0 +1,3 @@
+1. Changing `ChainParser` and `OneOfParser` to `ChainParser3` or `OneOfParser5` that make explicit checks instead of recursion gives almost no value
+2. Removing NamedArrowParser (that is built of 5 parsers) allows to add 5 more '-->' to the string. Simplifying `NamedArrowParser` by removing 1 of the parsers inside, allows to add 1 more arrow.
+3. Placing more complex parser on the bottom of the parser list allows to parse more '-->'

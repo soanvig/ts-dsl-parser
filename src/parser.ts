@@ -1,23 +1,25 @@
 /** Parser result helpers */
 
-import { AnySymbol, Char, Digit, NewLine, Space } from './parser/defs';
-import { Split } from './parser/helpers';
+import { AnySymbol, Char, Digit, NewLine, Space, WhiteSpace } from './parser/defs';
 import { ApplyParser, Assume, Parser, ParserFailResult, ParserSuccessResult } from './parser/parser';
 import { ChainParsers, DropParser, Many0Parser, ManyParser, MapConcatParser, OneOfParsers } from './parser/parser-combinators';
 import { FlatParserJoin } from './parser/parser-result-combinators';
 
 /** CharT -> [CharT] | ParserFailResult */
 export interface CharParser<CharT extends string> extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
-  (typeof input) extends [infer C extends CharT, ...infer Rest extends string[]]
-    ? ParserSuccessResult<[C], Rest>
+  apply: (input: Assume<this['input'], string>) =>
+  typeof input extends `${infer V extends CharT}${infer Rest}`
+    ? ParserSuccessResult<[V], Rest>
     : ParserFailResult<typeof input>;
 }
-
-/** ...Str -> [Str] | ParserFailResult */
+ 
+/**
+ * Str -> [Str] | ParserFailResult
+ * @warn Union type for Str is not supported
+ */
 export interface StringParser<Str extends string> extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
-  (typeof input) extends [...Split<Str>, ...infer Rest extends string[]]
+  apply: (input: Assume<this['input'], string>) =>
+  (typeof input) extends `${Str}${infer Rest}`
     ? ParserSuccessResult<[Str], Rest>
     : ParserFailResult<typeof input>;
 }
@@ -26,10 +28,13 @@ export interface StringParser<Str extends string> extends Parser {
 export type WordParser = MapConcatParser<ManyParser<CharParser<Char>>>;
 
 /** ' ' -> [] | ParserFailResult */
-export type DropSpaceParser = DropParser<CharParser<' '>>
+export type DropSpaceParser = DropParser<CharParser<Space>>
 
 /** ' ' -> [] | ParserFailResult */
-export type DropWhitespaceParser = DropParser<CharParser<' ' | NewLine>>
+export type DropWhitespaceParser = DropParser<CharParser<Space | NewLine>>
+
+/** ' ' -> [] | ParserFailResult */
+export type DropAllWhitespaceParser = DropParser<Many0Parser<CharParser<WhiteSpace>>>
 
 /** AnySymbol -> [$1] | ParserFailResult */
 export type SymbolParser = CharParser<AnySymbol>;
@@ -44,7 +49,7 @@ export type NumberParser = MapConcatParser<ManyParser<DigitParser>>;
  * [' ']*<P>[' ']* -> [P]
  * I don't like that name
  */
-export type AnySpaceSymbolParser<P extends Parser> = ChainParsers<[Many0Parser<CharParser<Space>>, P, Many0Parser<CharParser<Space>>]>;
+export type AnySpaceSymbolParser<P extends Parser> = ChainParsers<[DropAllWhitespaceParser, P, DropAllWhitespaceParser]>;
 
 /** Domain parsers */
 
@@ -54,19 +59,22 @@ type NamelessArrowParser = StringParser<'-->'>;
 /** Implementation */
 
 type AnyParser = OneOfParsers<[
-  NamedArrowParser,
-  NamelessArrowParser,
   SymbolParser,
   DropSpaceParser,
-  WordParser
+  WordParser,
+  NamedArrowParser,
+  NamelessArrowParser
 ]>;
 
-type TokenParser<T extends string[]> = 
+type TokenParser<T extends string> = 
   ApplyParser<T, AnyParser> extends infer R extends ParserSuccessResult<string[]>
-  ? FlatParserJoin<R, TokenParser<R[1]>>
+  ? FlatParserJoin<R, TokenParser<R['rest']>>
   : ParserFailResult<T>;
 
-type TestParsing = TokenParser<Split<'-->[qwe, qeq]--qweqeq-->'>>;
+type TestParsing = TokenParser<'-->[qwe, qeq]--qweqeq-->'>;
+// Performance tests
+// type TestParsing2 = TokenParser<'-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->'>;
+
+type TestParsing3 = TokenParser<'-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->'>;
 
 export { };
-

@@ -1,6 +1,6 @@
-import { AnySpaceSymbolParser, CharParser, NumberParser, StringParser } from './parser';
+import { AnySpaceSymbolParser, CharParser, DropAllWhitespaceParser, NumberParser, StringParser } from './parser';
 import { Colon, Comma, LeftBrace, LeftBracket, Quote, RightBrace, RightBracket, Space } from './parser/defs';
-import { Is, Split } from './parser/helpers';
+import { Is } from './parser/helpers';
 import { ApplyParser, Assume, Parser, ParserFailResult, ParserSuccessResult } from './parser/parser';
 import { ChainParsers, DropParser, Many0Parser, MapConcatParser, OneOfParsers, SeparatedBy0Parser, UntilParser } from './parser/parser-combinators';
 
@@ -21,14 +21,14 @@ export type JSONListToObject<T extends any[]> = T extends [infer K extends JSONS
   : {};
 
 interface JsonNumberParser extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<(typeof input), NumberParser> extends infer R extends ParserSuccessResult<string[]>
-    ? ParserSuccessResult<[JSONNumber<R[0][0]>], R[1]>
+    ? ParserSuccessResult<[JSONNumber<R['result'][0]>], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 interface JsonStringParser extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<
     (typeof input),
     ChainParsers<[
@@ -37,54 +37,54 @@ interface JsonStringParser extends Parser {
       DropParser<CharParser<Quote>>
     ]>
   > extends infer R extends ParserSuccessResult<string[]>
-    ? ParserSuccessResult<[JSONString<R[0][0]>], R[1]>
+    ? ParserSuccessResult<[JSONString<R['result'][0]>], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 interface JsonNullParser extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<(typeof input), StringParser<'null'>> extends infer R extends ParserSuccessResult<string[]>
-    ? ParserSuccessResult<[JSONNull], R[1]>
+    ? ParserSuccessResult<[JSONNull], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 interface JsonBooleanParser extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<(typeof input), OneOfParsers<[StringParser<'true'>, StringParser<'false'>]>> extends infer R extends ParserSuccessResult<string[]>
-    ? ParserSuccessResult<[JSONBoolean<R[0][0]>], R[1]>
+    ? ParserSuccessResult<[JSONBoolean<R['result'][0]>], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 interface ToJsonArray<P extends Parser> extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<any[]>
-    ? ParserSuccessResult<[JSONArray<R[0]>], R[1]>
+    ? ParserSuccessResult<[JSONArray<R['result']>], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 interface ToJsonObject<P extends Parser> extends Parser {
-  apply: (input: Assume<this['input'], string[]>) =>
+  apply: (input: Assume<this['input'], string>) =>
   ApplyParser<typeof input, P> extends infer R extends ParserSuccessResult<any[]>
-    ? ParserSuccessResult<[JSONObject<JSONListToObject<R[0]>>], R[1]>
+    ? ParserSuccessResult<[JSONObject<JSONListToObject<R['result']>>], R['rest']>
     : ParserFailResult<typeof input>;
 }
 
 type JsonArrayParser = ChainParsers<[
   DropParser<CharParser<LeftBracket>>,
-  DropParser<Many0Parser<CharParser<Space>>>,
+  DropAllWhitespaceParser,
   ToJsonArray<SeparatedBy0Parser<JsonParser, AnySpaceSymbolParser<CharParser<Comma>>>>,
-  DropParser<Many0Parser<CharParser<Space>>>,
+  DropAllWhitespaceParser,
   DropParser<CharParser<RightBracket>>
 ]>;
 
 type JsonObjectParser = ChainParsers<[
   DropParser<CharParser<LeftBrace>>,
-  DropParser<Many0Parser<CharParser<Space>>>,
+  DropAllWhitespaceParser,
   ToJsonObject<SeparatedBy0Parser<
     ChainParsers<[JsonStringParser, DropParser<AnySpaceSymbolParser<CharParser<Colon>>>, JsonParser]>,
     ChainParsers<[Many0Parser<CharParser<Space>>, CharParser<Comma>, Many0Parser<CharParser<Space>>]>
   >>,
-  DropParser<Many0Parser<CharParser<Space>>>,
+  DropAllWhitespaceParser,
   DropParser<CharParser<RightBrace>>
 ]>;
 
@@ -114,15 +114,18 @@ type UnwrapJSON<T extends JSONValue> =
   : T extends JSONBoolean<`${Is<infer R, boolean>}`> ? R
   : never;
 
-type ParsedJson = ApplyParser<Split<'[123,452  ,  "asd"]'>, JsonParser>;
-type ParsedJson2 = ApplyParser<Split<'112312321'>, JsonParser>;
-type ParsedJson3 = ApplyParser<Split<'{    "asd"   :  123, "qwe": [    1, 2]}'>, JsonParser>;
+type ParsedJson = ApplyParser<'[123,452  ,  "asd"]', JsonParser>;
+type ParsedJson2 = ApplyParser<'112312321', JsonParser>;
+type ParsedJson3 = ApplyParser<'{    "asd"   :  123, "qwe": [    1, 2]}', JsonParser>;
 
-type ParsedJson4 = ApplyParser<Split<'[1, 2, true, null, { "key": "value" }, []]'>, JsonParser>;
-type Result = UnwrapJSON<ParsedJson4[0][0]>;
+type ParsedJson4 = ApplyParser<'[1, 2, true, null, { "key": "value" }, []]', JsonParser>;
+type Result = UnwrapJSON<ParsedJson4['result'][0]>;
 const a: [1, 2, true, null, { key: "value" }, []] = {} as Result; // NO ERROR ON ASSIGMENT!
 
-type ParsedJson5 = ApplyParser<Split<'[{"qweasd":"a","wqqqqwef":"a"},{"qsb":"a","w":"a"}]'>, JsonParser>;
-type ParsedJson6 = ApplyParser<Split<'123123123123123111231231231231232131231231111111'>, JsonParser>;
-type Result5 = UnwrapJSON<ParsedJson5[0][0]>;
-type Splitted = Split<'[{"qweasd":"a","wqqqqwef":"a"},{"qsb":"a","w":"a"}]'>;
+type ParsedJson5 = ApplyParser<'[{"title":"Fuel Provider Holding Account","const":"fuelProviderHoldingAccount"},{"title":"General Holding Account","const":"generalHoldingAccount"}]', JsonParser>;
+type Result5 = UnwrapJSON<ParsedJson5['result'][0]>;
+
+// performance tests
+// type ParsedJson7 = ApplyParser<'{"definitions":{"accountType":{"oneOf":[{"title":"Air Transport Provider Holding Account","const":"airTransportProviderHoldingAccount"},{"title":"Fuel Provider Holding Account","const":"fuelProviderHoldingAccount"},{"title":"General Holding Account","const":"generalHoldingAccount"},{"title":"Logistics Provider Holding Account","const":"logisticsProviderHoldingAccount"}]},"certificationScheme":{"oneOf":[{"title":"RSB CORSIA","const":"rsbCorsia"},{"title":"ISCC CORSIA","const":"isccCorsia"},{"title":"RSB EU RED","const":"rsbEuRed"},{"title":"ISCC EU","const":"isccEu"},{"title":"RSB Global","const":"rsbGlobal"},{"title":"ISCC PLUS","const":"isccPlus"}]}}}', JsonParser>;
+// type ParsedJson6 = ApplyParser<'[1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9]', JsonParser>;
+
