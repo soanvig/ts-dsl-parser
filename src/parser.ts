@@ -3,7 +3,6 @@
 import { AnySymbol, Char, Digit, NewLine, Space, WhiteSpace } from './parser/defs';
 import { ApplyParser, Assume, Parser, ParserFailResult, ParserSuccessResult } from './parser/parser';
 import { ChainParsers, DropParser, Many0Parser, ManyParser, MapConcatParser, OneOfParsers } from './parser/parser-combinators';
-import { FlatParserJoin } from './parser/parser-result-combinators';
 
 /** CharT -> [CharT] | ParserFailResult */
 export interface CharParser<CharT extends string> extends Parser {
@@ -66,15 +65,6 @@ type AnyParser = OneOfParsers<[
   NamelessArrowParser
 ]>;
 
-type TokenParser<T extends string> = 
-  ApplyParser<T, AnyParser> extends infer R extends ParserSuccessResult<string[]>
-  ? FlatParserJoin<R, TokenParser<R['rest']>>
-  : ParserFailResult<T>;
-
-type TestParsing = TokenParser<'-->[qwe, qeq]--qweqeq-->'>;
-// Performance tests
-// type TestParsing2 = TokenParser<'-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->-->[qwe, qeq]--qweqeq-->'>;
-
-type TestParsing3 = TokenParser<'-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->-->'>;
+type TokenParser<T extends string> = ApplyParser<T, ManyParser<AnyParser>>
 
 export { };

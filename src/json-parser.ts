@@ -114,18 +114,9 @@ type UnwrapJSON<T extends JSONValue> =
   : T extends JSONBoolean<`${Is<infer R, boolean>}`> ? R
   : never;
 
-type ParsedJson = ApplyParser<'[123,452  ,  "asd"]', JsonParser>;
-type ParsedJson2 = ApplyParser<'112312321', JsonParser>;
-type ParsedJson3 = ApplyParser<'{    "asd"   :  123, "qwe": [    1, 2]}', JsonParser>;
-
-type ParsedJson4 = ApplyParser<'[1, 2, true, null, { "key": "value" }, []]', JsonParser>;
-type Result = UnwrapJSON<ParsedJson4['result'][0]>;
-const a: [1, 2, true, null, { key: "value" }, []] = {} as Result; // NO ERROR ON ASSIGMENT!
-
-type ParsedJson5 = ApplyParser<'[{"title":"Fuel Provider Holding Account","const":"fuelProviderHoldingAccount"},{"title":"General Holding Account","const":"generalHoldingAccount"}]', JsonParser>;
-type Result5 = UnwrapJSON<ParsedJson5['result'][0]>;
+type ParsedJson = ApplyParser<'[{"label":"Age","value":123},{"label":"Name","value":"Mr Smith"}]', JsonParser>;
+type Result = UnwrapJSON<ParsedJson['result'][0]>;
 
 // performance tests
-// type ParsedJson7 = ApplyParser<'{"definitions":{"accountType":{"oneOf":[{"title":"Air Transport Provider Holding Account","const":"airTransportProviderHoldingAccount"},{"title":"Fuel Provider Holding Account","const":"fuelProviderHoldingAccount"},{"title":"General Holding Account","const":"generalHoldingAccount"},{"title":"Logistics Provider Holding Account","const":"logisticsProviderHoldingAccount"}]},"certificationScheme":{"oneOf":[{"title":"RSB CORSIA","const":"rsbCorsia"},{"title":"ISCC CORSIA","const":"isccCorsia"},{"title":"RSB EU RED","const":"rsbEuRed"},{"title":"ISCC EU","const":"isccEu"},{"title":"RSB Global","const":"rsbGlobal"},{"title":"ISCC PLUS","const":"isccPlus"}]}}}', JsonParser>;
 // type ParsedJson6 = ApplyParser<'[1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9]', JsonParser>;
 
